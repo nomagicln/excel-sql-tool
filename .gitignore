@@ -1,0 +1,25 @@
+# Binary
+excel-sql-tool
+*.exe
+
+# Go
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Test files
+*.xlsx
+!tests/*.xlsx
