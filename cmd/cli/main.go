@@ -12,6 +12,7 @@ import (
 	"github.com/nomagicln/excel-sql-tool/internal/config"
 	"github.com/nomagicln/excel-sql-tool/internal/engine"
 	"github.com/nomagicln/excel-sql-tool/internal/excel"
+	"github.com/nomagicln/excel-sql-tool/internal/repl"
 	"github.com/nomagicln/excel-sql-tool/internal/skillgen"
 	"github.com/nomagicln/excel-sql-tool/internal/transport"
 )
@@ -197,6 +198,8 @@ func cmdQuery(args []string) {
 	dataStart := fs.Int("data-start", 2, "data start row number")
 	serverURL := fs.String("server", "", "remote server URL (e.g. http://localhost:8080)")
 	fs.StringVar(serverURL, "s", "", "remote server URL (shorthand)")
+	interactive := fs.Bool("interactive", false, "start interactive REPL session")
+	fs.BoolVar(interactive, "i", false, "start interactive REPL session (shorthand)")
 	positional, flagArgs := splitArgs(args)
 	fs.Parse(flagArgs)
 
@@ -216,14 +219,13 @@ func cmdQuery(args []string) {
 		return
 	}
 
-	// Mode 1: local one-shot
-	if len(positional) < 2 {
+	if len(positional) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: query <excel-file> \"<sql>\" [--sheet name]")
+		fmt.Fprintln(os.Stderr, "       query <excel-file> --interactive/-i")
 		fmt.Fprintln(os.Stderr, "       query --server <url> \"<sql>\"")
 		os.Exit(1)
 	}
 	file := positional[0]
-	sqlStr := positional[1]
 
 	parser := excel.NewParser()
 	eng, err := engine.NewSQLiteEngine(parser)
@@ -253,6 +255,23 @@ func cmdQuery(args []string) {
 			os.Exit(1)
 		}
 	}
+
+	// Mode 2: interactive REPL
+	if *interactive {
+		if err := repl.Run(eng, "excel-sql> "); err != nil {
+			fmt.Fprintf(os.Stderr, "repl error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode 1: local one-shot
+	if len(positional) < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: query <excel-file> \"<sql>\" [--sheet name]")
+		fmt.Fprintln(os.Stderr, "       query <excel-file> --interactive/-i")
+		os.Exit(1)
+	}
+	sqlStr := positional[1]
 
 	result, err := engine.PreprocessQuery(eng, sqlStr)
 	if err != nil {

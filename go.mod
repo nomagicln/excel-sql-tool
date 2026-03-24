@@ -3,6 +3,7 @@ module github.com/nomagicln/excel-sql-tool
 go 1.25.0
 
 require (
+	github.com/chzyer/readline v1.5.1
 	github.com/xuri/excelize/v2 v2.10.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.47.0
