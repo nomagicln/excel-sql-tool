@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/nomagicln/excel-sql-tool/internal/client"
 	"github.com/nomagicln/excel-sql-tool/internal/config"
 	"github.com/nomagicln/excel-sql-tool/internal/engine"
 	"github.com/nomagicln/excel-sql-tool/internal/excel"
@@ -166,16 +167,59 @@ func cmdGenerate(args []string) {
 	fmt.Printf("SKILL.md written to %s\n", *output)
 }
 
+func printResult(result *engine.QueryResult) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, strings.Join(result.Columns, "\t"))
+	sep := make([]string, len(result.Columns))
+	for i := range sep {
+		sep[i] = strings.Repeat("-", 10)
+	}
+	fmt.Fprintln(w, strings.Join(sep, "\t"))
+	for _, row := range result.Rows {
+		cells := make([]string, len(row))
+		for i, v := range row {
+			if v == nil {
+				cells[i] = "NULL"
+			} else {
+				cells[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		fmt.Fprintln(w, strings.Join(cells, "\t"))
+	}
+	w.Flush()
+	fmt.Printf("\n%d rows\n", len(result.Rows))
+}
+
 func cmdQuery(args []string) {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	sheet := fs.String("sheet", "", "sheet name")
 	headerRow := fs.Int("header-row", 1, "header row number")
 	dataStart := fs.Int("data-start", 2, "data start row number")
+	serverURL := fs.String("server", "", "remote server URL (e.g. http://localhost:8080)")
+	fs.StringVar(serverURL, "s", "", "remote server URL (shorthand)")
 	positional, flagArgs := splitArgs(args)
 	fs.Parse(flagArgs)
 
+	// Mode 3: remote server
+	if *serverURL != "" {
+		if len(positional) < 1 {
+			fmt.Fprintln(os.Stderr, "Usage: query --server <url> \"<sql>\"")
+			os.Exit(1)
+		}
+		sqlStr := positional[0]
+		result, err := client.QueryRemote(*serverURL, sqlStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "query error: %v\n", err)
+			os.Exit(1)
+		}
+		printResult(result)
+		return
+	}
+
+	// Mode 1: local one-shot
 	if len(positional) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: query <excel-file> \"<sql>\" [--sheet name]")
+		fmt.Fprintln(os.Stderr, "       query --server <url> \"<sql>\"")
 		os.Exit(1)
 	}
 	file := positional[0]
@@ -189,12 +233,10 @@ func cmdQuery(args []string) {
 	}
 	defer eng.Close()
 
-	// Determine which sheets to load
 	sheetsToLoad := []string{}
 	if *sheet != "" {
 		sheetsToLoad = append(sheetsToLoad, *sheet)
 	} else {
-		// Load all sheets from the file
 		meta, err := parser.InspectAll(file)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "inspect: %v\n", err)
@@ -224,28 +266,7 @@ func cmdQuery(args []string) {
 			os.Exit(1)
 		}
 	}
-
-	// Print as aligned table
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, strings.Join(result.Columns, "\t"))
-	sep := make([]string, len(result.Columns))
-	for i := range sep {
-		sep[i] = strings.Repeat("-", 10)
-	}
-	fmt.Fprintln(w, strings.Join(sep, "\t"))
-	for _, row := range result.Rows {
-		cells := make([]string, len(row))
-		for i, v := range row {
-			if v == nil {
-				cells[i] = "NULL"
-			} else {
-				cells[i] = fmt.Sprintf("%v", v)
-			}
-		}
-		fmt.Fprintln(w, strings.Join(cells, "\t"))
-	}
-	w.Flush()
-	fmt.Printf("\n%d rows\n", len(result.Rows))
+	printResult(result)
 }
 
 // excelFlags is a flag.Value that accumulates repeated --excel flags.
