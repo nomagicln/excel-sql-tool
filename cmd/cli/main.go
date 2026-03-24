@@ -12,6 +12,7 @@ import (
 	"github.com/nomagicln/excel-sql-tool/internal/engine"
 	"github.com/nomagicln/excel-sql-tool/internal/excel"
 	"github.com/nomagicln/excel-sql-tool/internal/skillgen"
+	"github.com/nomagicln/excel-sql-tool/internal/transport"
 )
 
 // splitArgs separates positional arguments from flag arguments so flags can
@@ -65,7 +66,7 @@ func usage() {
 	fmt.Println("  inspect  <excel-file> [--config config.yaml] [--output metadata.json]")
 	fmt.Println("  generate <config.yaml> <metadata.json> [--output SKILL.md]")
 	fmt.Println("  query    <excel-file> \"<sql>\" [--sheet name] [--header-row 1] [--data-start 2]")
-	fmt.Println("  server   [--port 8080]")
+	fmt.Println("  server   [--port 8080] [--host 0.0.0.0] [--excel file.xlsx ...]")
 }
 
 func cmdInspect(args []string) {
@@ -247,9 +248,53 @@ func cmdQuery(args []string) {
 	fmt.Printf("\n%d rows\n", len(result.Rows))
 }
 
+// excelFlags is a flag.Value that accumulates repeated --excel flags.
+type excelFlags []string
+
+func (e *excelFlags) String() string { return strings.Join(*e, ",") }
+func (e *excelFlags) Set(v string) error {
+	*e = append(*e, v)
+	return nil
+}
+
 func cmdServer(args []string) {
 	fs := flag.NewFlagSet("server", flag.ExitOnError)
-	port := fs.Int("port", 8080, "server port")
+	port := fs.Int("port", 8080, "listen port")
+	host := fs.String("host", "0.0.0.0", "listen host")
+	var excels excelFlags
+	fs.Var(&excels, "excel", "excel file to load at startup (repeatable)")
 	fs.Parse(args)
-	fmt.Printf("Server mode not yet implemented. Would start on port %d\n", *port)
+
+	parser := excel.NewParser()
+	eng, err := engine.NewSQLiteEngine(parser)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create engine: %v\n", err)
+		os.Exit(1)
+	}
+	defer eng.Close()
+
+	// Pre-load any excel files specified via --excel
+	for _, file := range excels {
+		meta, err := parser.InspectAll(file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "inspect %q: %v\n", file, err)
+			os.Exit(1)
+		}
+		for _, sheet := range meta.Sheets {
+			if err := eng.LoadSheet(file, sheet.Name, sheet.HeaderRow, sheet.DataStart); err != nil {
+				fmt.Fprintf(os.Stderr, "load sheet %q: %v\n", sheet.Name, err)
+				os.Exit(1)
+			}
+		}
+		fmt.Printf("Loaded %q (%d sheets)\n", file, len(meta.Sheets))
+	}
+
+	addr := fmt.Sprintf("%s:%d", *host, *port)
+	fmt.Printf("Listening on http://%s\n", addr)
+
+	srv := transport.NewServer(eng, parser)
+	if err := srv.ListenAndServe(addr); err != nil {
+		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+		os.Exit(1)
+	}
 }
