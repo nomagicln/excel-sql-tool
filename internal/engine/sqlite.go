@@ -122,6 +122,59 @@ func (e *sqliteEngine) Query(sqlStr string) (*QueryResult, error) {
 	return &result, rows.Err()
 }
 
+func (e *sqliteEngine) ListTables() ([]string, error) {
+	rows, err := e.db.Query(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		tables = append(tables, name)
+	}
+	return tables, rows.Err()
+}
+
+func (e *sqliteEngine) DescribeTable(name string) ([]ColumnInfo, error) {
+	rows, err := e.db.Query(fmt.Sprintf(`PRAGMA table_info("%s")`, name))
+	if err != nil {
+		return nil, fmt.Errorf("describe table: %w", err)
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []ColumnInfo
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		// PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+		colName := fmt.Sprintf("%s", vals[1])
+		colType := fmt.Sprintf("%s", vals[2])
+		result = append(result, ColumnInfo{Name: colName, Type: colType})
+	}
+	return result, rows.Err()
+}
+
+func (e *sqliteEngine) DropTable(name string) error {
+	_, err := e.db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, name))
+	return err
+}
+
 func (e *sqliteEngine) Close() error {
 	return e.db.Close()
 }

@@ -14,6 +14,29 @@ import (
 	"github.com/nomagicln/excel-sql-tool/internal/skillgen"
 )
 
+// splitArgs separates positional arguments from flag arguments so flags can
+// appear either before or after positional args.
+func splitArgs(args []string) (positional, flags []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if len(a) > 0 && a[0] == '-' {
+			flags = append(flags, a)
+			// If this flag looks like --key (not --key=val), consume next arg as value
+			if len(a) > 1 && a[1] == '-' && !strings.Contains(a, "=") && i+1 < len(args) && args[i+1][0] != '-' {
+				i++
+				flags = append(flags, args[i])
+			} else if len(a) == 2 && i+1 < len(args) && args[i+1][0] != '-' {
+				// short flag like -p value
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, a)
+		}
+	}
+	return
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -49,13 +72,14 @@ func cmdInspect(args []string) {
 	fs := flag.NewFlagSet("inspect", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "config file path")
 	output := fs.String("output", "", "output metadata JSON file")
-	fs.Parse(args)
+	positional, flagArgs := splitArgs(args)
+	fs.Parse(flagArgs)
 
-	if fs.NArg() < 1 {
+	if len(positional) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: inspect <excel-file>")
 		os.Exit(1)
 	}
-	file := fs.Arg(0)
+	file := positional[0]
 
 	parser := excel.NewParser()
 
@@ -102,20 +126,21 @@ func cmdInspect(args []string) {
 func cmdGenerate(args []string) {
 	fs := flag.NewFlagSet("generate", flag.ExitOnError)
 	output := fs.String("output", "SKILL.md", "output SKILL.md file")
-	fs.Parse(args)
+	positional, flagArgs := splitArgs(args)
+	fs.Parse(flagArgs)
 
-	if fs.NArg() < 2 {
+	if len(positional) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: generate <config.yaml> <metadata.json>")
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load(fs.Arg(0))
+	cfg, err := config.Load(positional[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	metaData, err := os.ReadFile(fs.Arg(1))
+	metaData, err := os.ReadFile(positional[1])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "read metadata: %v\n", err)
 		os.Exit(1)
@@ -145,14 +170,15 @@ func cmdQuery(args []string) {
 	sheet := fs.String("sheet", "", "sheet name")
 	headerRow := fs.Int("header-row", 1, "header row number")
 	dataStart := fs.Int("data-start", 2, "data start row number")
-	fs.Parse(args)
+	positional, flagArgs := splitArgs(args)
+	fs.Parse(flagArgs)
 
-	if fs.NArg() < 2 {
+	if len(positional) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: query <excel-file> \"<sql>\" [--sheet name]")
 		os.Exit(1)
 	}
-	file := fs.Arg(0)
-	sqlStr := fs.Arg(1)
+	file := positional[0]
+	sqlStr := positional[1]
 
 	parser := excel.NewParser()
 	eng, err := engine.NewSQLiteEngine(parser)
@@ -185,10 +211,17 @@ func cmdQuery(args []string) {
 		}
 	}
 
-	result, err := eng.Query(sqlStr)
+	result, err := engine.PreprocessQuery(eng, sqlStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query error: %v\n", err)
 		os.Exit(1)
+	}
+	if result == nil {
+		result, err = eng.Query(sqlStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "query error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Print as aligned table
