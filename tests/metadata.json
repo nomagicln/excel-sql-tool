@@ -1,0 +1,53 @@
+{
+  "file": "tests/test_data.xlsx",
+  "sheets": [
+    {
+      "name": "销售明细",
+      "rows": 8,
+      "columns": 4,
+      "header_row": 1,
+      "data_start": 2,
+      "columns_def": [
+        {
+          "name": "代理商",
+          "type": "string",
+          "description": ""
+        },
+        {
+          "name": "区域",
+          "type": "string",
+          "description": ""
+        },
+        {
+          "name": "销售额",
+          "type": "number",
+          "description": ""
+        },
+        {
+          "name": "日期",
+          "type": "date",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "产品表",
+      "rows": 2,
+      "columns": 2,
+      "header_row": 1,
+      "data_start": 2,
+      "columns_def": [
+        {
+          "name": "产品",
+          "type": "string",
+          "description": ""
+        },
+        {
+          "name": "类别",
+          "type": "string",
+          "description": ""
+        }
+      ]
+    }
+  ]
+}

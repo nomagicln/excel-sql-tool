@@ -28,6 +28,18 @@ description: {{ .Config.Description }}
 |------|------|------|
 {{ range .ColumnsDef }}| {{ .Name }} | {{ .Type }} | {{ .Description }} |
 {{ end }}{{ end }}
+## Meta Commands
+
+The following meta commands are available in addition to standard SQL:
+
+| Command | Description |
+|---|---|
+` + "| `SHOW TABLES;` | List all loaded sheets |\n" +
+	"| `DESC <table>;` | Show column names and types for a table |\n" +
+	"| `DESCRIBE <table>;` | Same as DESC |\n" +
+	"| `SHOW COLUMNS FROM <table>;` | Same as DESC |\n" + `
+> When using ` + "`excel-sql-tool query <file> --interactive`" + `, these meta commands are available in the REPL.
+
 ## 领域知识
 {{ range .Config.Domain }}
 - {{ . }}
